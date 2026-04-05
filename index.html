@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Formula Racing Simulator</title>
+  <meta name="description"
+    content="Simulate a formula race with custom participants. Features realistic cornering physics, random speed boosts, a live leaderboard, multiple circuits, and race history." />
+  <meta name="theme-color" content="#0e0e0e" />
+  <meta property="og:title" content="Formula Racing Simulator" />
+  <meta property="og:description"
+    content="Add drivers and watch them race on real grand prix circuits with physics-based cornering, random boosts, and full race history." />
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+</head>
+
+<body>
+
+  <div id="app">
+
+    <!-- ═══════════════════════════════════════
+         NAVIGATION BAR
+    ══════════════════════════════════════════ -->
+    <nav id="nav" role="navigation" aria-label="Main navigation">
+      <div class="nav-brand" aria-label="Formula Simulator">
+        <span class="brand-dot"></span>
+        FORMULA RACING
+      </div>
+      <button class="nav-tab active" id="tab-sim" aria-current="page">SIMULATOR</button>
+      <button class="nav-tab" id="tab-maps">MAPS</button>
+      <button class="nav-tab" id="tab-history">HISTORY</button>
+      <div class="nav-spacer"></div>
+      <!-- Current track indicator -->
+      <div class="nav-track-indicator">
+        <span class="label-sm">CIRCUIT</span>
+        <span id="current-track-name" class="nav-track-name">—</span>
+      </div>
+      <div class="nav-status" role="status" aria-live="polite">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">LOADING</span>
+      </div>
+    </nav>
+
+    <!-- ═══════════════════════════════════════
+         MAIN VIEW CONTAINER
+    ══════════════════════════════════════════ -->
+    <div id="main-view">
+
+      <!-- ─── LEFT PANEL — Grid Entries (always visible) ─── -->
+      <aside id="panel-left" aria-label="Grid Entries">
+        <div class="panel-header">
+          <div class="panel-title">Grid Entries</div>
+
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label for="laps-input" class="label-sm" style="white-space:nowrap;opacity:0.7;">LAPS</label>
+            <input class="hud-inputa" id="laps-input" type="number" value="1" min="1" max="99"
+              style="width:64px;text-align:center;" aria-label="Number of laps" />
+          </div>
+        </div>
+
+        <div id="entry-form">
+          <div class="input-row">
+            <textarea class="hud-input" id="name-input" placeholder="Driver name (comma-sep for bulk, max 100)" rows="3"
+              aria-label="Driver name input"></textarea>
+          </div>
+          <div class="input-row" style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+
+            <button class="btn-primary" id="btn-add-name" style="flex:1;" aria-label="Add driver">+ ADD</button>
+          </div>
+        </div>
+
+        <div id="participant-list" role="list" aria-label="Registered drivers"></div>
+
+        <div id="panel-left-actions" style="display:flex; flex-direction:column; gap:8px;">
+          <button class="btn-primary" id="btn-start-race" disabled aria-label="Start the race" style="width:100%;">
+            ▶ START RACE
+          </button>
+          <div style="display:flex; gap:8px;">
+            <button class="btn-secondary" id="btn-clear-list" aria-label="Clear list" style="flex:1;">
+              목록 리셋
+            </button>
+            <button class="btn-secondary" id="btn-reset" aria-label="Reset race" style="flex:1;">
+              ↺ RESET
+            </button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!-- VIEW: SIMULATOR                                       -->
+      <!-- ───────────────────────────────────────────────────── -->
+      <div id="view-simulator" class="content-view active-view">
+
+        <main id="track-area" role="main" aria-label="Race track">
+          <div id="race-timer" aria-live="polite">0:00.00</div>
+
+          <!-- Countdown -->
+          <div id="countdown-overlay" aria-live="assertive" role="alert">
+            <span id="countdown-num" class="countdown-number">3</span>
+          </div>
+
+          <!-- Track SVG will be injected here by fetch() -->
+          <div id="track-container">
+            <!-- Loading placeholder -->
+            <div id="track-loading"
+              style="display:flex;align-items:center;justify-content:center;height:100%;flex-direction:column;gap:12px;">
+              <div class="track-spinner"></div>
+              <div class="label-sm">LOADING CIRCUIT...</div>
+            </div>
+          </div>
+
+          <!-- Empty state -->
+          <div id="empty-state">
+            <div class="empty-icon">🏎</div>
+            <div class="empty-text">Add drivers to begin</div>
+          </div>
+        </main>
+
+        <!-- Right panel: Live Leaderboard -->
+        <aside id="panel-right" aria-label="Live leaderboard">
+          <div class="panel-header">
+            <div class="panel-title">Leaderboard</div>
+            <div class="panel-subtitle">Live positions</div>
+          </div>
+          <div id="leaderboard-list" role="list" aria-label="Current race standings" aria-live="polite"></div>
+          <div id="race-stats">
+            <div class="stat-row">
+              <span class="stat-label">Finished</span>
+              <span class="stat-value" id="stat-finishing">0 / 0</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Leader</span>
+              <span class="stat-value" id="stat-leader">—</span>
+            </div>
+            <div class="stat-row">
+              <span class="stat-label">Laps</span>
+              <span class="stat-value" id="stat-laps">1</span>
+            </div>
+          </div>
+        </aside>
+
+      </div><!-- /view-simulator -->
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!-- VIEW: MAPS                                            -->
+      <!-- ───────────────────────────────────────────────────── -->
+      <div id="view-maps" class="content-view" aria-label="Track selection map">
+        <div class="panel-header" style="padding:24px 32px 16px;">
+          <div class="panel-title">Select Circuit</div>
+          <div class="panel-subtitle">Choose a track — vehicles will be repositioned automatically</div>
+        </div>
+        <div id="maps-grid" role="list" aria-label="Available circuits"></div>
+      </div>
+
+      <!-- ───────────────────────────────────────────────────── -->
+      <!-- VIEW: HISTORY                                         -->
+      <!-- ───────────────────────────────────────────────────── -->
+      <div id="view-history" class="content-view" aria-label="Race history">
+        <div class="panel-header" style="padding:24px 32px 16px;">
+          <div class="panel-title">Race History</div>
+          <div class="panel-subtitle">Click any race to replay the podium and results</div>
+        </div>
+        <div id="history-list" role="list" aria-label="Past races"></div>
+      </div>
+
+    </div><!-- /main-view -->
+
+  </div><!-- /app -->
+
+  <!-- ═══════════════════════════════════════
+       PODIUM OVERLAY (shared — live races & history replay)
+  ══════════════════════════════════════════ -->
+  <div id="podium-overlay" role="dialog" aria-modal="true" aria-label="Race results">
+
+    <div class="race-complete-header">
+      <h1>RACE COMPLETE</h1>
+      <div class="subtitle">SESSION CLASSIFIED</div>
+    </div>
+
+    <div id="podium-stage" aria-label="Podium top 3"></div>
+
+    <section id="results-section" aria-label="Full race classification">
+      <h2>POST-RACE CLASSIFICATION</h2>
+      <div id="results-list" role="list"></div>
+    </section>
+
+    <div id="copy-controls">
+      <label for="copy-range" class="label-sm">Copy Range</label>
+      <select id="copy-range" class="hud-select" aria-label="Select result range to copy">
+        <option value="all">All Drivers</option>
+        <option value="10">Top 10</option>
+        <option value="20">Top 20</option>
+      </select>
+      <button class="btn-primary" onclick="copyResults()" id="btn-copy-results" aria-label="Copy results to clipboard">
+        ⎘ COPY RESULTS
+      </button>
+      <span id="copy-feedback" role="status" aria-live="polite"></span>
+    </div>
+
+    <div style="margin-top:24px;display:flex;gap:16px;justify-content:center;">
+      <button class="btn-secondary" id="btn-close-podium"
+        onclick="document.getElementById('podium-overlay').classList.remove('visible')" aria-label="Close podium">
+        CLOSE
+      </button>
+      <button class="btn-primary" id="btn-race-again"
+        onclick="resetRace(); document.getElementById('podium-overlay').classList.remove('visible');"
+        aria-label="Race again">
+        ↺ RACE AGAIN
+      </button>
+    </div>
+
+  </div>
+
+  <script src="race.js"></script>
+
+</body>
+
+</html>
