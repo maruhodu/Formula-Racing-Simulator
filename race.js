@@ -133,7 +133,6 @@ let totalLaps = 1;              // number of laps to complete
 const raceHistory = [];
 
 // ── DOM References ─────────────────────────────────────────────
-const vehicleLayer = document.getElementById('vehicle-layer');
 const participantList = document.getElementById('participant-list');
 const leaderboardList = document.getElementById('leaderboard-list');
 const btnStart = document.getElementById('btn-start-race');
@@ -786,7 +785,7 @@ function updateLeaderboard() {
     } else {
       gapStr = laps > 1
         ? `L${lapsCapped + 1}/${laps}`
-        : `+${((leaderDist - p.distance) / MAX_SPEED / 60).toFixed(2)}s`;
+        : `+${Math.round(leaderDist - p.distance)}px`;
     }
     const gapClass = pos === 1 ? 'leader' : p.finished ? 'finished' : '';
 
@@ -1164,17 +1163,6 @@ async function init() {
     const hasDrivers = vLayer?.querySelector('.vehicle-circle') !== null;
     if (emptyState) emptyState.style.display = hasDrivers ? 'none' : 'flex';
   }).observe(document.getElementById('track-container'), { childList: true, subtree: true });
-
-  // Entry count label
-  new MutationObserver(() => {
-    const n = participantList.querySelectorAll('.participant-item').length;
-    const el = document.getElementById('entry-count');
-    if (el) el.textContent = n === 0
-      ? 'Add at least 2 drivers to race'
-      : n === 1
-        ? '1 driver — add at least 1 more'
-        : `${n} drivers on grid`;
-  }).observe(participantList, { childList: true });
 
   updateStartButton();
 }
