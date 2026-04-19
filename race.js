@@ -130,7 +130,16 @@ let totalLaps = 1;              // number of laps to complete
 
 // ── Race History ───────────────────────────────────────────────
 // Each entry: { id, trackName, date, duration, results: [{rank,name,color,finishTime}] }
-const raceHistory = [];
+// Persisted to localStorage so history survives page reloads.
+const HISTORY_STORAGE_KEY = 'f1sim_raceHistory';
+let raceHistory = (() => {
+  try {
+    const raw = localStorage.getItem(HISTORY_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+})();
 
 // ── DOM References ─────────────────────────────────────────────
 const participantList = document.getElementById('participant-list');
@@ -196,7 +205,11 @@ function getContrastColor(hex) {
 }
 
 function initials(name) {
-  return name.trim().split(/\s+/).map(w => w[0]?.toUpperCase() || '').join('').slice(0, 2) || '?';
+  // Strip non-alphanumeric characters from each word's first letter so that
+  // names like "<script>" can't inject raw HTML angle-brackets into innerHTML.
+  return name.trim().split(/\s+/)
+    .map(w => (w[0]?.toUpperCase() || '').replace(/[^A-Z0-9]/gi, ''))
+    .join('').slice(0, 2) || '?';
 }
 
 function escHtml(str) {
@@ -215,11 +228,15 @@ async function preloadAllTracks() {
     })
   );
 
+  let failCount = 0;
   results.forEach((result, i) => {
     if (result.status === 'rejected') {
+      failCount++;
       console.error(`Failed to preload track/${trackFiles[i]}:`, result.reason);
     }
   });
+  // Return how many tracks loaded so init() can decide whether to surface an error.
+  return trackFiles.length - failCount;
 }
 
 // ── Track Inject ───────────────────────────────────────────────
@@ -650,6 +667,7 @@ function saveRaceToHistory(results) {
     })),
   };
   raceHistory.unshift(entry);  // newest first
+  try { localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(raceHistory)); } catch { /* quota exceeded or private mode */ }
 }
 
 function renderHistory() {
@@ -921,7 +939,7 @@ function raceLoop() {
       p.speed += (MAX_SPEED - p.speed) * 0.04;
     }
 
-    p.speed = Math.max(MIN_SPEED * 0.6, Math.min(MAX_SPEED * BOOST_MULTIPLIER, p.speed));
+    p.speed = Math.max(MIN_SPEED, Math.min(MAX_SPEED * BOOST_MULTIPLIER, p.speed));
     p.distance += p.speed;
 
     // Finish detection — car must complete all laps
@@ -961,7 +979,11 @@ function raceLoop() {
 function finishEffect(p) {
   const vLayer = document.getElementById('vehicle-layer');
   if (!vLayer) return;
-  const pt = trackPath.getPointAtLength(p.distance);
+  // p.distance == totalLen * totalLaps when a car finishes, which exceeds the
+  // path length. Modulo back into [0, totalLen) and use the precomputed cache
+  // instead of the slow/unsafe trackPath.getPointAtLength().
+  const loopDist = totalLen > 0 ? p.distance % totalLen : 0;
+  const pt = getPrecomputedPoint(loopDist);
   const burst = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
   burst.setAttribute('cx', pt.x);
   burst.setAttribute('cy', pt.y);
@@ -1064,14 +1086,13 @@ function copyResults() {
     setTimeout(() => feedback.classList.remove('show'), 2000);
   };
 
+  // navigator.clipboard is available in all modern browsers. The old
+  // document.execCommand('copy') fallback is deprecated and unreachable in
+  // practice, so we just surface a friendly message on failure instead.
   navigator.clipboard.writeText(text).then(show).catch(() => {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    show();
+    feedback.textContent = '⚠️ Copy failed — please copy manually.';
+    feedback.classList.add('show');
+    setTimeout(() => feedback.classList.remove('show'), 3000);
   });
 }
 
@@ -1125,7 +1146,24 @@ async function init() {
   setStatus('LOADING...');
 
   // Fetch and cache ALL track SVGs up front (parallel)
-  await preloadAllTracks();
+  const loadedCount = await preloadAllTracks();
+
+  // Surface a visible error if every single track failed (e.g. offline / 404).
+  // Without this the status stays on "LOADING..." forever.
+  if (loadedCount === 0) {
+    setStatus('ERROR — tracks failed to load');
+    const tc = document.getElementById('track-container');
+    if (tc) {
+      tc.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+                    height:100%;gap:12px;color:#ff6b6b;font-family:sans-serif;text-align:center;padding:24px;">
+          <span style="font-size:2rem;">⚠️</span>
+          <strong>Could not load any track files.</strong>
+          <span style="opacity:.7;font-size:.85rem;">Check your network connection or that the <code>track/</code> folder is present, then refresh.</span>
+        </div>`;
+    }
+    return; // do not proceed — UI is unusable without at least one track
+  }
 
   // Inject default track from cache (synchronous — no fetch needed)
   loadTrack(currentTrack);
